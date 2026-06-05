@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>読書の記録</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #f7f4ef; font-family: 'Georgia', 'Hiragino Mincho ProN', 'Yu Mincho', serif; }
+    input, select, textarea, button { font-family: inherit; }
+    input:focus, select:focus, textarea:focus { outline: 2px solid #d4a017; outline-offset: 1px; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+    const STORAGE_KEY = "book-reviews-data";
+
+    const sampleBooks = [
+      { id: 1, title: "コンビニ人間", author: "村田 沙耶香", date: "2024-03-12", rating: 5, genre: "小説", review: "読み終わった後、しばらく余韻が続いた。主人公の「普通」への問いかけが鋭く、自分の価値観を揺さぶられた。", color: "#e8f4f0" },
+      { id: 2, title: "嫌われる勇気", author: "岸見 一郎 / 古賀 史健", date: "2024-01-05", rating: 4, genre: "自己啓発", review: "アドラー心理学を対話形式でわかりやすく解説。「課題の分離」という概念が特に印象的で、日常に活かせる。", color: "#fef6e8" },
+      { id: 3, title: "銃・病原菌・鉄", author: "ジャレド・ダイアモンド", date: "2023-11-20", rating: 5, genre: "ノンフィクション", review: "人類史の不平等をこれほど明快に説明した本はない。地理・環境が文明の発展を決定づけるという視点に驚かされた。", color: "#f0eef8" }
+    ];
+
+    const genreColors = {
+      "小説": "#e8f4f0", "自己啓発": "#fef6e8", "ノンフィクション": "#f0eef8",
+      "エッセイ": "#fde8ee", "ビジネス": "#e8f0fe", "歴史": "#f5ede3",
+      "詩集": "#fdf2f8", "その他": "#f2f2f2"
+    };
+    const genres = ["すべて","小説","自己啓発","ノンフィクション","エッセイ","ビジネス","歴史","詩集","その他"];
+
+    function StarRating({ value, onChange }) {
+      const [hover, setHover] = useState(0);
+      return (
+        <div style={{ display:"flex", gap:2 }}>
+          {[1,2,3,4,5].map(s => (
+            <span key={s}
+              onClick={() => onChange && onChange(s)}
+              onMouseEnter={() => onChange && setHover(s)}
+              onMouseLeave={() => onChange && setHover(0)}
+              style={{ fontSize:20, cursor: onChange?"pointer":"default", color: s<=(hover||value)?"#d4a017":"#d0c8b8", transition:"color 0.15s", userSelect:"none" }}
+            >★</span>
+          ))}
+        </div>
+      );
+    }
+
+    function App() {
+      const [books, setBooks] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [saveStatus, setSaveStatus] = useState(null);
+      const [filter, setFilter] = useState("すべて");
+      const [sortBy, setSortBy] = useState("date");
+      const [showForm, setShowForm] = useState(false);
+      const [editId, setEditId] = useState(null);
+      const [expandedId, setExpandedId] = useState(null);
+      const [form, setForm] = useState({ title:"", author:"", date:"", rating:5, genre:"小説", review:"" });
+
+      useEffect(() => {
+        try {
+          const saved = localStorage.getItem(STORAGE_KEY);
+          setBooks(saved ? JSON.parse(saved) : sampleBooks);
+        } catch { setBooks(sampleBooks); }
+        setLoading(false);
+      }, []);
+
+      useEffect(() => {
+        if (loading) return;
+        setSaveStatus("saving");
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(books));
+          setSaveStatus("saved");
+          setTimeout(() => setSaveStatus(null), 2000);
+        } catch { setSaveStatus("error"); }
+      }, [books]);
+
+      const filtered = books
+        .filter(b => filter === "すべて" || b.genre === filter)
+        .sort((a, b) => {
+          if (sortBy === "date") return new Date(b.date) - new Date(a.date);
+          if (sortBy === "rating") return b.rating - a.rating;
+          return a.title.localeCompare(b.title, "ja");
+        });
+
+      const openAdd = () => {
+        setForm({ title:"", author:"", date: new Date().toISOString().slice(0,10), rating:5, genre:"小説", review:"" });
+        setEditId(null); setShowForm(true);
+      };
+      const openEdit = (book) => {
+        setForm({ title:book.title, author:book.author, date:book.date, rating:book.rating, genre:book.genre, review:book.review });
+        setEditId(book.id); setShowForm(true);
+      };
+      const handleSave = () => {
+        if (!form.title.trim()) return;
+        if (editId) {
+          setBooks(prev => prev.map(b => b.id === editId ? {...b, ...form, color: genreColors[form.genre]||"#f2f2f2"} : b));
+        } else {
+          setBooks(prev => [...prev, {...form, id: Date.now(), color: genreColors[form.genre]||"#f2f2f2"}]);
+        }
+        setShowForm(false);
+      };
+      const handleDelete = (id) => setBooks(prev => prev.filter(b => b.id !== id));
+
+      if (loading) return <div style={{ minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", color:"#8a7050" }}>読み込み中…</div>;
+
+      const inputStyle = { display:"block", width:"100%", padding:"8px 10px", border:"1px solid #d8d0c4", borderRadius:7, fontSize:14, color:"#2c2416", background:"#fdfaf6", marginBottom:12, boxSizing:"border-box" };
+      const labelStyle = { display:"block", fontSize:12, color:"#8a7050", marginBottom:4, marginTop:2 };
+
+      return (
+        <div style={{ minHeight:"100vh", background:"#f7f4ef", paddingBottom:60 }}>
+          {/* Header */}
+          <div style={{ background:"#2c2416", padding:"32px 24px 24px", borderBottom:"4px solid #d4a017" }}>
+            <div style={{ maxWidth:680, margin:"0 auto" }}>
+              <div style={{ display:"flex", alignItems:"baseline", justifyContent:"space-between", flexWrap:"wrap", gap:8 }}>
+                <div style={{ display:"flex", alignItems:"baseline", gap:12 }}>
+                  <h1 style={{ margin:0, fontSize:28, fontWeight:"normal", color:"#f5ede3", letterSpacing:"0.08em" }}>📚 読書の記録</h1>
+                  <span style={{ color:"#9a8060", fontSize:13 }}>{books.length} 冊</span>
+                </div>
+                <div style={{ fontSize:11 }}>
+                  {saveStatus==="saving" && <span style={{ color:"#9a8060" }}>保存中…</span>}
+                  {saveStatus==="saved"  && <span style={{ color:"#7ab87a" }}>✓ 保存済み</span>}
+                  {saveStatus==="error"  && <span style={{ color:"#c07070" }}>保存エラー</span>}
+                </div>
+              </div>
+              <p style={{ color:"#8a7050", margin:"8px 0 0", fontSize:13 }}>読んだ本と感想をまとめておくノート</p>
+            </div>
+          </div>
+
+          <div style={{ maxWidth:680, margin:"0 auto", padding:"0 16px" }}>
+            {/* Controls */}
+            <div style={{ display:"flex", gap:10, alignItems:"center", flexWrap:"wrap", padding:"20px 0 16px", borderBottom:"1px solid #e0d8cc" }}>
+              <div style={{ display:"flex", gap:6, flexWrap:"wrap", flex:1 }}>
+                {["すべて","小説","自己啓発","ノンフィクション","エッセイ","ビジネス","その他"].map(g => (
+                  <button key={g} onClick={() => setFilter(g)} style={{ padding:"4px 12px", border:"1px solid", borderColor: filter===g?"#2c2416":"#ccc4b4", borderRadius:20, background: filter===g?"#2c2416":"white", color: filter===g?"#f5ede3":"#6a5a40", fontSize:12, cursor:"pointer" }}>{g}</button>
+                ))}
+              </div>
+              <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={{ padding:"4px 8px", border:"1px solid #ccc4b4", borderRadius:6, background:"white", color:"#6a5a40", fontSize:12, cursor:"pointer" }}>
+                <option value="date">読んだ日順</option>
+                <option value="rating">評価順</option>
+                <option value="title">タイトル順</option>
+              </select>
+              <button onClick={openAdd} style={{ padding:"6px 16px", background:"#d4a017", color:"#fff", border:"none", borderRadius:6, fontSize:13, cursor:"pointer", fontWeight:"bold", whiteSpace:"nowrap" }}>＋ 追加</button>
+            </div>
+
+            {/* Book list */}
+            <div style={{ marginTop:8 }}>
+              {filtered.length === 0 && <div style={{ textAlign:"center", color:"#a09080", padding:"60px 0", fontSize:15 }}>まだ記録がありません</div>}
+              {filtered.map(book => (
+                <div key={book.id} style={{ background:"white", borderRadius:10, marginBottom:12, overflow:"hidden", boxShadow:"0 1px 4px rgba(0,0,0,0.07)", border:"1px solid #e8e0d4" }}>
+                  <div style={{ display:"flex", alignItems:"stretch" }}>
+                    <div style={{ width:6, flexShrink:0, background: book.color==="#f2f2f2"?"#ccc":book.color, filter:"saturate(1.5) brightness(0.85)" }} />
+                    <div style={{ flex:1, padding:"14px 16px 12px" }}>
+                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:8 }}>
+                        <div style={{ flex:1 }}>
+                          <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+                            <span style={{ fontSize:11, padding:"2px 8px", background:book.color, color:"#6a5a40", borderRadius:10, border:"1px solid rgba(0,0,0,0.08)" }}>{book.genre}</span>
+                            <span style={{ fontSize:11, color:"#a09080" }}>{book.date}</span>
+                          </div>
+                          <h3 style={{ margin:"6px 0 2px", fontSize:17, color:"#2c2416", fontWeight:"normal" }}>{book.title}</h3>
+                          <div style={{ fontSize:12, color:"#8a7050" }}>{book.author}</div>
+                        </div>
+                        <div style={{ flexShrink:0 }}><StarRating value={book.rating} /></div>
+                      </div>
+                      <div style={{ marginTop:10 }}>
+                        <p style={{ margin:0, fontSize:13, color:"#5a4a34", lineHeight:1.75, display: expandedId===book.id?"block":"-webkit-box", WebkitLineClamp: expandedId===book.id?"unset":2, WebkitBoxOrient:"vertical", overflow: expandedId===book.id?"visible":"hidden" }}>
+                          {book.review || <span style={{ color:"#bbb" }}>感想なし</span>}
+                        </p>
+                        {book.review && book.review.length > 60 && (
+                          <button onClick={() => setExpandedId(expandedId===book.id ? null : book.id)} style={{ background:"none", border:"none", color:"#d4a017", fontSize:12, cursor:"pointer", padding:"2px 0" }}>
+                            {expandedId===book.id ? "▲ 閉じる" : "▼ 続きを読む"}
+                          </button>
+                        )}
+                      </div>
+                      <div style={{ display:"flex", gap:8, marginTop:10, justifyContent:"flex-end" }}>
+                        <button onClick={() => openEdit(book)} style={{ background:"none", border:"1px solid #d0c8b8", color:"#8a7050", fontSize:12, padding:"3px 12px", borderRadius:5, cursor:"pointer" }}>編集</button>
+                        <button onClick={() => handleDelete(book.id)} style={{ background:"none", border:"1px solid #f0d0cc", color:"#c06060", fontSize:12, padding:"3px 12px", borderRadius:5, cursor:"pointer" }}>削除</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Modal */}
+          {showForm && (
+            <div onClick={e => e.target===e.currentTarget && setShowForm(false)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:100, padding:16 }}>
+              <div style={{ background:"white", borderRadius:12, padding:24, width:"100%", maxWidth:460, boxShadow:"0 20px 60px rgba(0,0,0,0.25)" }}>
+                <h2 style={{ margin:"0 0 20px", fontSize:17, color:"#2c2416", fontWeight:"normal" }}>{editId ? "記録を編集" : "新しい本を記録する"}</h2>
+                <label style={labelStyle}>タイトル *</label>
+                <input value={form.title} onChange={e => setForm({...form, title:e.target.value})} placeholder="本のタイトル" style={inputStyle} />
+                <label style={labelStyle}>著者</label>
+                <input value={form.author} onChange={e => setForm({...form, author:e.target.value})} placeholder="著者名" style={inputStyle} />
+                <div style={{ display:"flex", gap:12 }}>
+                  <div style={{ flex:1 }}>
+                    <label style={labelStyle}>ジャンル</label>
+                    <select value={form.genre} onChange={e => setForm({...form, genre:e.target.value})} style={inputStyle}>
+                      {genres.filter(g => g!=="すべて").map(g => <option key={g}>{g}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ flex:1 }}>
+                    <label style={labelStyle}>読んだ日</label>
+                    <input type="date" value={form.date} onChange={e => setForm({...form, date:e.target.value})} style={inputStyle} />
+                  </div>
+                </div>
+                <label style={labelStyle}>評価</label>
+                <div style={{ marginBottom:14 }}><StarRating value={form.rating} onChange={r => setForm({...form, rating:r})} /></div>
+                <label style={labelStyle}>感想・メモ</label>
+                <textarea value={form.review} onChange={e => setForm({...form, review:e.target.value})} placeholder="読んで感じたこと、印象に残ったことなど…" rows={4} style={{ ...inputStyle, resize:"vertical", lineHeight:1.7 }} />
+                <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:8 }}>
+                  <button onClick={() => setShowForm(false)} style={{ padding:"8px 20px", border:"1px solid #d0c8b8", background:"white", color:"#6a5a40", borderRadius:7, cursor:"pointer", fontSize:14 }}>キャンセル</button>
+                  <button onClick={handleSave} disabled={!form.title.trim()} style={{ padding:"8px 20px", background: form.title.trim()?"#d4a017":"#e0d8cc", color:"white", border:"none", borderRadius:7, cursor: form.title.trim()?"pointer":"default", fontSize:14, fontWeight:"bold" }}>保存</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
